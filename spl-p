@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# 1. Kiểm tra tham số
+if [ -z "$1" ]; then
+    echo "Please add file patch"
+    exit 1
+fi
+
+INPUT_FILE="$1"
+
+# 2. Kiểm tra file tồn tại
+if [ ! -f "$INPUT_FILE" ]; then
+    echo "Lỗi: Không tìm thấy file '$INPUT_FILE'"
+    exit 1
+fi
+
+# 3. Xác định thư mục chứa file patch gốc
+# dirname sẽ lấy đường dẫn thư mục cha của file
+PARENT_DIR=$(dirname "$INPUT_FILE")
+
+# 4. Tạo thư mục 'out' nằm chung chỗ với file patch
+OUTPUT_DIR="${PARENT_DIR}/out"
+mkdir -p "$OUTPUT_DIR"
+
+echo "Source: $INPUT_FILE"
+echo "Out Dir: $OUTPUT_DIR"
+echo "Running..."
+# 5. Dùng AWK để tách file (Logic giữ nguyên, chỉ thay đổi đường dẫn output)
+awk -v out_dir="$OUTPUT_DIR" '
+    /^diff --git/ {
+        if (outfile != "") {
+            close(outfile)
+        }
+
+        file_count++
+
+        # Lấy tên file: b/fs/Makefile -> fs_Makefile
+        raw_path = $NF
+        sub(/^b\//, "", raw_path)
+        safe_name = raw_path
+        gsub(/\//, "_", safe_name)
+
+        # Tạo đường dẫn file đích
+        outfile = sprintf("%s/%03d_%s.patch", out_dir, file_count, safe_name)
+
+        print "-> " outfile
+    }
+
+    {
+        if (outfile != "") {
+            print $0 > outfile
+        }
+    }
+' "$INPUT_FILE"
+
+echo "---------------------------------------"
+echo "Done! Split into: $OUTPUT_DIR"
